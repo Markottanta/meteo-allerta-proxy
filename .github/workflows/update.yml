@@ -42,6 +42,3 @@ jobs:
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          git add allerta.json
-          git commit -m "Aggiornamento allerta da Meteoalarm" || echo "Nessuna modifica"
-          git push
