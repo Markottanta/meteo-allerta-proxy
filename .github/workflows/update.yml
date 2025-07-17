@@ -1,0 +1,42 @@
+name: Update Allerta JSON
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Ogni ora
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Scarica e converte XML in JSON
+        run: |
+          curl -s https://allertameteo.regione.lazio.it/xml/allerta.xml -o allerta.xml
+
+          php -r '
+          $xml = simplexml_load_file("allerta.xml");
+          foreach ($xml->zona as $zona) {
+              if ((string)$zona["id"] === "E") {
+                  $allerta = [
+                      "zona" => (string)$zona["id"],
+                      "validita" => (string)$zona->data,
+                      "colore" => strtolower((string)$zona->allerta_colore),
+                      "tipo" => (string)$zona->allerta_rischio,
+                      "timestamp" => time()
+                  ];
+                  file_put_contents("allerta.json", json_encode($allerta, JSON_PRETTY_PRINT));
+                  break;
+              }
+          }
+          '
+
+      - name: Commit & push allerta.json
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add allerta.json
+          git commit -m "Aggiornamento automatico allerta meteo" || echo "Nessuna modifica"
+          git push
