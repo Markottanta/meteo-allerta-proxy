@@ -1,63 +1,47 @@
-name: Aggiorna Allerta Meteo
+name: Aggiorna Allerta Meteo Lazio
 
 on:
   schedule:
-    - cron: '0 * * * *' # ogni ora
-  workflow_dispatch: # avvio manuale
+    - cron: "0 * * * *" # ogni ora
+  workflow_dispatch:
 
 jobs:
-  aggiorna-allerta:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Clona il repository
-        uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - name: Installa PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.1'
-
-      - name: Scarica XML e genera JSON
+      - name: Scarica RSS Protezione Civile e genera JSON
         run: |
+          curl -s -A "Mozilla/5.0" -o feed.xml https://www.protezionecivile.gov.it/export/risks/allertameteo/rss/allerta-it.xml
           php <<'EOF'
           <?php
-          $xmlUrl = "https://allertameteo.regione.lazio.it/xml/allerta.xml";
-          $zona_target = "E";
-
-          $xml = @simplexml_load_file($xmlUrl);
-          if (!$xml) {
-              file_put_contents("allerta.json", json_encode(["errore" => "Impossibile caricare l'XML."]));
-              exit(0);
-          }
-
-          $allerta = null;
-          foreach ($xml->zona as $zona) {
-              if ((string)$zona['id'] === $zona_target) {
-                  $allerta = [
-                      "zona" => (string)$zona['id'],
-                      "validita" => (string)$zona->data,
-                      "colore" => strtolower((string)$zona->allerta_colore),
-                      "tipo" => (string)$zona->allerta_rischio
+          $xml = simplexml_load_file('feed.xml');
+          $found = null;
+          foreach ($xml->channel->item as $item) {
+              if (strpos((string)$item->title, 'Lazio') !== false) {
+                  $found = [
+                      'titolo' => (string)$item->title,
+                      'pubblicazione' => (string)$item->pubDate,
+                      'descrizione' => strip_tags((string)$item->description)
                   ];
                   break;
               }
           }
-
-          if (!$allerta) {
-              file_put_contents("allerta.json", json_encode(["errore" => "Zona non trovata."]));
-          } else {
-              file_put_contents("allerta.json", json_encode($allerta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-          }
-          ?>
+          file_put_contents('allerta.json', json_encode($found ?: ['errore'=>'Nessuna allerta per il Lazio'], JSON_PRETTY_PRINT));
           EOF
 
-      - name: Commit file JSON
-        env:
-          TOKEN: ${{ secrets.GH_PAT }}
+      - name: Commit e push
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-          git remote set-url origin https://x-access-token:${TOKEN}@github.com/${{ github.repository }}
+          git add allerta.json
+          git commit -m "Aggiornamento allerta da Protezione Civile" || echo "Nessuna modifica"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           git add allerta.json
           git commit -m "Aggiornamento allerta da Meteoalarm" || echo "Nessuna modifica"
           git push
