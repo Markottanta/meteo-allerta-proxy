@@ -21,9 +21,12 @@ jobs:
           jq '[.[] | select(.region == "Lazio")][0]' meteoalarm.json > allerta.json || echo '{}' > allerta.json
 
       - name: Commit file JSON
+        env:
+          TOKEN: ${{ secrets.GH_PAT }}
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
+          git remote set-url origin https://x-access-token:${TOKEN}@github.com/${{ github.repository }}
           git add allerta.json
           git commit -m "Aggiornamento allerta da Meteoalarm" || echo "Nessuna modifica"
           git push
